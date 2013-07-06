@@ -17,12 +17,11 @@ function() {
 	function ObjectFactory(collection, objectvalue) {
 		if(!objectvalue){return;}
 		objectvalue.save = function() {
-			objectvalue = angular.copy(objectvalue);
-			cleanupAngularObject(objectvalue);
-
+			objectvaluecopy = angular.copy(objectvalue);
+			cleanupAngularObject(objectvaluecopy);
 			collection.update({
 				_id : this._id
-			}, objectvalue);
+			}, objectvaluecopy);
 		}
 		objectvalue.remove = function() {
 			collection.remove({
@@ -44,32 +43,35 @@ function($rootScope, MeteorCollections, $meteorObject) {
 	}, 100);
 	function CollectionFactory(collection) {
 		var collection = MeteorCollections.getCollection(collection);
-		var value = [];
 
 		function Collection(value) {
-			value = {};
 		}
 
 
-		Collection.observe = function(cursor, array) {
+		Collection.observe = function(cursor, array, value) {
 			cursor.observe({
 				"addedAt" : function(document, atIndex, before) {
 					//console.log(document);
 
-					if (!array) {
-						value = new $meteorObject(collection, document);
+					if (!array && atIndex == 0) {
+						angular.copy(new $meteorObject(collection, document), value)
 					}
 					if (array) {
-						value[atIndex] = new $meteorObject(collection, document);
+						value.splice(atIndex,0, new $meteorObject(collection, document))
 					}
 					$rootScope.apply();
 				},
 				"changedAt" : function(newDocument, oldDocument, atIndex) {
-
-					value[atIndex] = new $meteorObject(collection, newDocument);
+					if (!array && atIndex == 0) {
+						angular.copy(new $meteorObject(collection, newDocument), value)
+					}
+					if(array) {
+						value[atIndex] = new $meteorObject(collection, newDocument);
+					}
 					$rootScope.apply();
 				},
 				"removedAt" : function(oldDocument, atIndex) {
+					// As the bigger array is not available, currently this doesn't support findOne
 
 					value.splice(atIndex, 1);
 					$rootScope.apply();
@@ -78,13 +80,13 @@ function($rootScope, MeteorCollections, $meteorObject) {
 		}
 		Collection.find = function(selector, options, callback) {
 			value = this instanceof Collection ? this : [];
-			this.observe(collection.find(selector, options), true);
+			this.observe(collection.find(selector, options), true, value);
 			return value;
 		}
 		Collection.findOne = function(selector, options, callback) {
 			value = this instanceof Collection ? this : {};
 			value = new $meteorObject(collection,collection.find(selector,options).fetch()[0]);
-			this.observe(collection.find(selector, options), false);
+			this.observe(collection.find(selector, options), false, value);
 			return value;
 		}
 		Collection.insert = function(values) {
